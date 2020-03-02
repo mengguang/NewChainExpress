@@ -140,41 +140,47 @@ int main()
 		}
 
 		newchain_api_express api("testnet.cloud.diynova.com", 8888, address_hex);
-		api.get_base_info();
-		api.dump_base_info();
 
-		Transaction tx;
-		tx.set_nonce(api.get_nonce());
-		tx.set_gas_price(api.get_gas_price());
-		tx.set_gas_limit(api.get_gas_limit());
-		tx.set_to_address(hex_to_address);
-		tx.set_value_in_new(10);
-		tx.set_chain_id(api.get_chain_id());
-		auto unsigned_tx = tx.build_unsigned_transaction();
-		auto hex_unsigned_tx = bin_to_hex(unsigned_tx);
-		cout << hex_unsigned_tx << endl;
+		for (auto i = 0; i < 16; i++)
+		{
+			api.get_base_info();
+			api.dump_base_info();
 
-		ECDSA<ECP, Keccak_256>::Signer signer(privateKey);
-		SecByteBlock signature(signer.MaxSignatureLength());
-		AutoSeededRandomPool prng;
-		auto signature_length = signer.SignMessage(prng,
-		                                           unsigned_tx.data(), unsigned_tx.size(),
-		                                           signature.data());
-		cout << bin_to_hex(signature) << endl;
-		cout << signature_length << endl;
-		ECDSA<ECP, Keccak_256>::Verifier verifier(publicKey);
-		auto result = verifier.VerifyMessage(unsigned_tx.data(), unsigned_tx.size(),
-		                                     signature.data(), signature.size());
-		cout << "verify result: " << result << endl;
+			Transaction tx;
+			tx.set_nonce(api.get_nonce_pending());
+			tx.set_gas_price(api.get_gas_price());
+			tx.set_gas_limit(api.get_gas_limit());
+			tx.set_to_address(hex_to_address);
+			tx.set_value_in_new(1);
+			tx.set_chain_id(api.get_chain_id());
+			auto unsigned_tx = tx.build_unsigned_transaction();
+			auto hex_unsigned_tx = bin_to_hex(unsigned_tx);
+			cout << hex_unsigned_tx << endl;
 
-		api.send_transaction(unsigned_tx, signature);
+			ECDSA<ECP, Keccak_256>::Signer signer(privateKey);
+			SecByteBlock signature(signer.MaxSignatureLength());
+			AutoSeededRandomPool prng;
+			cout << i << endl;
+			auto signature_length = signer.SignMessage(prng,
+			                                           unsigned_tx.data(), unsigned_tx.size(),
+			                                           signature.data());
+			cout << bin_to_hex(signature) << endl;
+			cout << signature_length << endl;
+			ECDSA<ECP, Keccak_256>::Verifier verifier(publicKey);
+			auto result = verifier.VerifyMessage(unsigned_tx.data(), unsigned_tx.size(),
+			                                     signature.data(), signature.size());
+			cout << "verify result: " << result << endl;
+
+			api.send_transaction(unsigned_tx, signature,1);
+			Sleep(1000);
+		}
 
 		cout << "All works fine!" << endl;
 		return 0;
 	}
 	catch (std::exception& e)
 	{
-		cerr << e.what() << endl;
+		cerr << "Exception: " << e.what() << endl;
 		return 1;
 	}
 }

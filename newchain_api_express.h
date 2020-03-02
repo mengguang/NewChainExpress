@@ -11,7 +11,8 @@ private:
 	std::string from_address;
 
 	long chain_id;
-	long nonce{};
+	long nonce_latest{};
+	long nonce_pending{};
 	long gas_price{};
 	long gas_limit{};
 	long balance_in_new{};
@@ -19,7 +20,7 @@ private:
 public:
 	newchain_api_express(std::string _host, int _port, std::string _from_address)
 		: host(std::move(_host)), port(_port), from_address(std::move(_from_address)),
-		chain_id(0), nonce(0), gas_price(0), gas_limit(30000), balance_in_new(0), id(0)
+		  chain_id(0), nonce_latest(0), nonce_pending(0), gas_price(0), gas_limit(30000), balance_in_new(0), id(0)
 	{
 	}
 
@@ -28,9 +29,14 @@ public:
 		return chain_id;
 	}
 
-	auto get_nonce() const
+	auto get_nonce_latest() const
 	{
-		return nonce;
+		return nonce_latest;
+	}
+
+	auto get_nonce_pending() const
+	{
+		return nonce_pending;
 	}
 
 	auto get_gas_price() const
@@ -51,6 +57,7 @@ public:
 	std::string post_request(const std::string& request_json) const
 	{
 		httplib::Client cli(host, port);
+		cli.set_read_timeout(10, 0);
 		auto const res = cli.Post("/", request_json, "application/json");
 		if (res)
 		{
@@ -64,10 +71,12 @@ public:
 
 	void dump_base_info() const
 	{
-		std::cout << "Base info:" << std::endl;
-		std::cout << "chain id:" << chain_id << std::endl;
-		std::cout << "gas price:" << gas_price << std::endl;
-		std::cout << "balance in NEW:" << balance_in_new << std::endl;
+		std::cout << "Base info: " << std::endl;
+		std::cout << "chain id: " << chain_id << std::endl;
+		std::cout << "nonce latest: " << nonce_latest << std::endl;
+		std::cout << "nonce pending: " << nonce_pending << std::endl;
+		std::cout << "gas price: " << gas_price << std::endl;
+		std::cout << "balance in NEW: " << balance_in_new << std::endl;
 	}
 
 	void get_base_info()
@@ -76,29 +85,39 @@ public:
 
 		doc_request["jsonrpc"] = "2.0";
 		doc_request["method"] = "newton_getBaseInfo";
-		JsonArray params = doc_request.createNestedArray("params");
-		params.add(std::string("0x") + from_address);
+		auto params = doc_request.createNestedObject("params");
+		params["address"] = std::string("0x") + from_address;
 		doc_request["id"] = id++;
 
 		std::string request_json;
 		serializeJson(doc_request, request_json);
+		std::cout << request_json << std::endl;
 		auto response_json = post_request(request_json);
 
 		DynamicJsonDocument doc_response(4096);
 		deserializeJson(doc_response, response_json);
-
+		std::cout << response_json << std::endl;
 		//const char* jsonrpc = doc_response["jsonrpc"]; // "2.0"
 		//int id = doc_response["id"]; // 1
 
 		JsonObject result = doc_response["result"];
-		const char* result_nonce = result["nonce"]; // "0x4df"
+		if (!result)
+		{
+			throw std::exception("newton_getBaseInfo response error.");
+		}
+		const char* result_nonce_latest = result["nonceLatest"]; // "0x4df"
+		const char* result_nonce_pending = result["noncePending"]; // "0x4df"
 		const char* result_gasPrice = result["gasPrice"]; // "0x64"
 		int result_networkID = result["networkID"]; // 1007
 		const char* result_balance = result["balance"]; // "0x32b6fbe3b559ae26fceaf1"
 
-		if (result_nonce)
+		if (result_nonce_latest)
 		{
-			nonce = std::stol(result_nonce, nullptr, 16);
+			nonce_latest = std::stol(result_nonce_latest, nullptr, 16);
+		}
+		if (result_nonce_pending)
+		{
+			nonce_pending = std::stol(result_nonce_pending, nullptr, 16);
 		}
 		if (result_gasPrice)
 		{
@@ -111,20 +130,21 @@ public:
 		balance_in_new = balance.ConvertToLong();
 	}
 
-	void send_transaction(const SecByteBlock& unsigned_transaction, const SecByteBlock& signature)
+	void send_transaction(const SecByteBlock& unsigned_transaction, const SecByteBlock& signature, const int wait = 1)
 	{
 		DynamicJsonDocument doc_request(4096);
 
 		doc_request["jsonrpc"] = "2.0";
 		doc_request["method"] = "newton_sendTransaction";
 
-		JsonArray params = doc_request.createNestedArray("params");
+		JsonObject method_params = doc_request.createNestedObject("params");
 
-		JsonObject params_0 = params.createNestedObject();
-		params_0["from"] = std::string("0x") + from_address;
-		params_0["message"] = std::string("0x") + bin_to_hex(unsigned_transaction);
-		params_0["signature"] = std::string("0x") + bin_to_hex(signature);
-		(void)params.add(1);
+		//JsonObject method_params = params.createNestedObject();
+		method_params["from"] = std::string("0x") + from_address;
+		method_params["tx"] = std::string("0x") + bin_to_hex(unsigned_transaction);
+		method_params["signature"] = std::string("0x") + bin_to_hex(signature);
+		method_params["wait"] = wait;
+		//(void)params.add(1);
 		doc_request["id"] = id++;
 
 		std::string request_json;
@@ -138,6 +158,9 @@ public:
 		//const char* jsonrpc = doc_response["jsonrpc"]; // "2.0"
 		//int id = doc_response["id"]; // 67
 		const char* result = doc_response["result"];
-		std::cout << "tx hash: " << result << std::endl;
+		if (result)
+		{
+			std::cout << "tx hash: " << result << std::endl;
+		}
 	}
 };
