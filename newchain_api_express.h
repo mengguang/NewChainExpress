@@ -17,8 +17,8 @@ private:
 	long balance_in_new{};
 	long id{};
 public:
-	newchain_api_express(const std::string& _host, int _port, const std::string& _from_address)
-		: host(_host), port(_port), from_address(_from_address),
+	newchain_api_express(std::string _host, int _port, std::string _from_address)
+		: host(std::move(_host)), port(_port), from_address(std::move(_from_address)),
 		chain_id(0), nonce(0), gas_price(0), gas_limit(30000), balance_in_new(0), id(0)
 	{
 	}
@@ -48,7 +48,7 @@ public:
 		return balance_in_new;
 	}
 
-	std::string post_request(const std::string& request_json)
+	std::string post_request(const std::string& request_json) const
 	{
 		httplib::Client cli(host, port);
 		auto const res = cli.Post("/", request_json, "application/json");
@@ -105,8 +105,7 @@ public:
 			gas_price = std::stol(result_gasPrice, nullptr, 16);
 		}
 		chain_id = result_networkID;
-		// auto bin_balance = hex_to_bin(result_balance);
-		// CryptoPP::Integer balance(bin_balance.data(), bin_balance.size());
+
 		CryptoPP::Integer balance(result_balance);
 		balance /= CryptoPP::Integer("1000000000000000000");
 		balance_in_new = balance.ConvertToLong();
@@ -139,7 +138,6 @@ public:
 		//const char* jsonrpc = doc_response["jsonrpc"]; // "2.0"
 		//int id = doc_response["id"]; // 67
 		const char* result = doc_response["result"];
-		// "0xf172da87fc390f9b57205fd5ebb6bf2a716635951dffde28fe93be7ad2ec1b77"
 		std::cout << "tx hash: " << result << std::endl;
 	}
 };
